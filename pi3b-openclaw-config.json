@@ -1,0 +1,129 @@
+{
+  "browser": {
+    "enabled": false
+  },
+
+  "canvasHost": {
+    "enabled": false
+  },
+
+  "tts": {
+    "auto": "off"
+  },
+
+  "discovery": {
+    "mdns": {
+      "mode": "off"
+    },
+    "wideArea": {
+      "enabled": false
+    }
+  },
+
+  "tools": {
+    "profile": "minimal",
+    "deny": [
+      "browser_*",
+      "image_*"
+    ],
+    "media": {
+      "concurrency": 1,
+      "video": {
+        "enabled": false
+      }
+    },
+    "web": {
+      "fetch": {
+        "maxChars": 10000,
+        "maxCharsCap": 15000
+      }
+    }
+  },
+
+  "plugins": {
+    "deny": [
+      "open-prose",
+      "matrix",
+      "msteams",
+      "voice-call",
+      "nostr",
+      "twitch",
+      "feishu",
+      "tlon",
+      "copilot-proxy",
+      "diagnostics-otel",
+      "llm-task",
+      "lobster",
+      "memory-lancedb",
+      "minimax-portal-auth",
+      "qwen-portal-auth",
+      "google-antigravity-auth",
+      "google-gemini-cli-auth",
+      "sherpa-onnx-tts",
+      "skill-creator",
+      "model-usage",
+      "himalaya",
+      "tmux",
+      "video-frames",
+      "nano-banana-pro",
+      "coding-agent",
+      "openai-image-gen",
+      "openai-whisper",
+      "openai-whisper-api",
+      "canvas",
+      "peekaboo",
+      "oracle",
+      "clawhub",
+      "blogwatcher",
+      "obsidian",
+      "notion",
+      "session-logs"
+    ],
+    "slots": {
+      "memory": "none"
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-20250514",
+        "fallbacks": ["openai/gpt-4o-mini"]
+      },
+      "maxConcurrent": 1,
+      "timeoutSeconds": 120,
+      "mediaMaxMb": 2,
+      "thinkingDefault": "off",
+      "verboseDefault": "off",
+      "blockStreamingDefault": "off",
+      "subagents": {
+        "maxConcurrent": 1
+      },
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "15m"
+      },
+      "compaction": {
+        "mode": "safeguard",
+        "reserveTokensFloor": 5000,
+        "maxHistoryShare": 0.3,
+        "memoryFlush": {
+          "enabled": true,
+          "softThresholdTokens": 2000
+        }
+      },
+      "heartbeat": {
+        "every": "60m"
+      },
+      "sandbox": {
+        "mode": "off"
+      }
+    }
+  },
+
+  "models": {
+    "bedrockDiscovery": {
+      "enabled": false
+    }
+  }
+}
