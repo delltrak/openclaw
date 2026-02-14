@@ -533,3 +533,106 @@ O que perdemos sao browser automation e device control.
 Para um assistente que conversa, lembra, busca na web, le/escreve
 arquivos, executa comandos e agenda lembretes, e praticamente a
 mesma experiencia do full.
+
+---
+
+## PARTE 12: Imagem Customizada - DietPi (recomendado)
+
+### Por que trocar o OS?
+
+O Raspberry Pi OS Lite consome ~200 MB de RAM so pro sistema idle.
+Com DietPi, o idle cai para ~50 MB, liberando +150 MB para o OpenClaw.
+
+### Comparacao de OS para Pi 3B+
+
+| OS | RAM idle | RAM livre pro OpenClaw | Dificuldade |
+|---|---|---|---|
+| Pi OS Lite (padrao) | ~200 MB | 726 MB | Facil |
+| Pi OS Lite (stripped) | ~130 MB | 796 MB | Facil |
+| **DietPi** (recomendado) | **~50 MB** | **876 MB** | Facil |
+| Alpine Linux | ~50 MB | 876 MB | Medio |
+| Buildroot | ~25 MB | 901 MB | Dificil |
+
+### Por que DietPi e nao Alpine?
+
+- **glibc**: todas as dependencias nativas (sharp, node-pty, sqlite-vec)
+  funcionam sem recompilar. Alpine usa musl que pode dar problemas
+- **Familiar**: baseado em Debian, usa `apt install`
+- **Otimizado para SBCs**: RAMlog, CPU governor, dietpi-software
+- **RAM praticamente igual**: ~50 MB vs ~50 MB do Alpine
+- **Comunidade ativa**: suporte direto para Pi 3B+
+
+### O que o DietPi remove vs Pi OS Lite
+
+| Componente removido | RAM economizada |
+|---|---|
+| systemd-journald (usa RAMlog) | ~10-15 MB |
+| avahi-daemon | ~5-10 MB |
+| rsyslog | ~5-10 MB |
+| triggerhappy | ~2-5 MB |
+| dbus (minimo) | ~5-10 MB |
+| Bluetooth stack (bluez) | ~5-10 MB |
+| Audio (ALSA/Pulse) | ~5-10 MB |
+| Kernel modules extras | ~10-20 MB |
+| **Total economizado** | **~50-90 MB** |
+
+Adicionalmente usa Dropbear no lugar de OpenSSH (economiza ~5 MB).
+
+### Como usar a imagem customizada
+
+Opcao A - Build automatizado:
+```bash
+bash scripts/build-dietpi-image.sh
+# Gera: build/dietpi-openclaw-pi3b.img
+sudo dd if=build/dietpi-openclaw-pi3b.img of=/dev/sdX bs=4M status=progress
+```
+
+Opcao B - Instalacao manual no DietPi:
+```bash
+# 1. Baixe DietPi ARMv8: https://dietpi.com/#download
+# 2. Flash no SD card com balenaEtcher
+# 3. Boot e aguarde setup automatico (~5 min)
+# 4. SSH: ssh root@DietPi (senha: dietpi)
+# 5. Instale Node.js:
+dietpi-software install 9  # Node.js
+# 6. Instale OpenClaw:
+npm install -g pnpm
+git clone https://github.com/nicholasgriffintn/openclaw.git /opt/openclaw
+cd /opt/openclaw && pnpm install
+# 7. Copie a config otimizada:
+mkdir -p ~/.openclaw
+cp pi3b-openclaw-config.json ~/.openclaw/openclaw.json
+# 8. Configure API key:
+echo 'OPENAI_API_KEY=sk-sua-chave' >> ~/.openclaw/.env
+# 9. Rode o setup:
+bash scripts/pi3b-setup.sh
+```
+
+### Bonus: zram swap (melhor que swapfile no SD card)
+
+O DietPi suporta zram nativamente. Em vez de swap em arquivo
+(que desgasta o SD card), usamos swap comprimida na RAM:
+
+```bash
+# 2 GB de swap comprimida usando ~200 MB de RAM real
+modprobe zram
+zramctl /dev/zram0 --size 2G --algorithm lz4
+mkswap /dev/zram0
+swapon -p 100 /dev/zram0
+```
+
+Vantagens: mais rapido que SD card, sem desgaste do cartao,
+e a compressao lz4 e tao rapida que nao impacta a CPU.
+
+### RAM final com DietPi
+
+| Componente | Pi OS Lite | DietPi |
+|---|---|---|
+| OS idle | 200 MB | **50 MB** |
+| OpenClaw otimizado | 285 MB | 285 MB |
+| **Total usado** | **485 MB** | **335 MB** |
+| **RAM livre** | **441 MB (48%)** | **591 MB (64%)** |
+| Swap (zram) | 2 GB (arquivo) | 2 GB (comprimido) |
+
+Com DietPi, o Pi 3B+ fica com **64% de RAM livre** - sobra muito
+espaco para picos de uso, e o zram protege o SD card.
