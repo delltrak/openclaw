@@ -79,9 +79,8 @@
       "notion",
       "session-logs"
     ],
-    "slots": {
-      "memory": "none"
-    }
+    "slots": {}
+
   },
 
   "agents": {
@@ -93,7 +92,7 @@
       "maxConcurrent": 1,
       "timeoutSeconds": 120,
       "mediaMaxMb": 2,
-      "thinkingDefault": "off",
+      "thinkingDefault": "low",
       "verboseDefault": "off",
       "blockStreamingDefault": "off",
       "subagents": {
@@ -114,6 +113,56 @@
       },
       "heartbeat": {
         "every": "60m"
+      },
+      "memorySearch": {
+        "enabled": true,
+        "provider": "openai",
+        "model": "text-embedding-3-small",
+        "sources": ["memory"],
+        "chunking": {
+          "tokens": 200,
+          "overlap": 40
+        },
+        "sync": {
+          "onSessionStart": true,
+          "onSearch": true,
+          "watch": false,
+          "intervalMinutes": 0,
+          "sessions": {
+            "deltaBytes": 0,
+            "deltaMessages": 0
+          }
+        },
+        "query": {
+          "maxResults": 3,
+          "minScore": 0.4,
+          "hybrid": {
+            "enabled": true,
+            "vectorWeight": 0.6,
+            "textWeight": 0.4,
+            "candidateMultiplier": 2
+          }
+        },
+        "store": {
+          "driver": "sqlite",
+          "vector": {
+            "enabled": true
+          },
+          "cache": {
+            "enabled": true,
+            "maxEntries": 1000
+          }
+        },
+        "cache": {
+          "enabled": true,
+          "maxEntries": 1000
+        },
+        "remote": {
+          "batch": {
+            "enabled": false,
+            "concurrency": 1
+          }
+        }
       },
       "sandbox": {
         "mode": "off"

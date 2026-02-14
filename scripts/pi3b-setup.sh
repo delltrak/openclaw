@@ -98,8 +98,17 @@ OPENCLAW_SKIP_GMAIL_WATCHER=1
 OPENCLAW_SKIP_CRON=1
 OPENCLAW_DISABLE_BONJOUR=1
 NODE_OPTIONS=--max-old-space-size=384
+
+# API key para embeddings remotos (memoria vetorial)
+# Descomente e configure UMA das opcoes abaixo:
+# OPENAI_API_KEY=sk-sua-chave-aqui
+# GOOGLE_API_KEY=sua-chave-gemini-aqui
 ENVEOF
   echo "  Environment variables added to $ENV_FILE"
+  echo ""
+  echo "  IMPORTANTE: Edite $ENV_FILE e configure sua API key"
+  echo "  para embeddings (OPENAI_API_KEY ou GOOGLE_API_KEY)"
+  echo "  A memoria vetorial precisa disso para lembrar do usuario."
 else
   echo "  Environment already configured"
 fi
@@ -162,9 +171,16 @@ echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Next steps:"
-echo "  1. Reboot to apply gpu_mem change: sudo reboot"
-echo "  2. After reboot, start OpenClaw: sudo systemctl enable --now openclaw-pi"
-echo "  3. Check status: sudo systemctl status openclaw-pi"
-echo "  4. View logs: journalctl -u openclaw-pi -f"
+echo "  1. Edit ~/.openclaw/.env and set OPENAI_API_KEY or GOOGLE_API_KEY"
+echo "     (needed for vector memory - remembering users)"
+echo "  2. Reboot to apply gpu_mem change: sudo reboot"
+echo "  3. After reboot, start OpenClaw: sudo systemctl enable --now openclaw-pi"
+echo "  4. Check status: sudo systemctl status openclaw-pi"
+echo "  5. View logs: journalctl -u openclaw-pi -f"
 echo ""
-echo "Expected RAM usage: ~340-470MB (well within 1GB + 2GB swap)"
+echo "Features enabled:"
+echo "  - Thinking (low): reasoning via remote API (0 MB local)"
+echo "  - Vector memory: embeddings via OpenAI/Gemini API (30-80 MB local)"
+echo "  - SQLite + sqlite-vec: local vector storage"
+echo ""
+echo "Expected RAM usage: ~370-550MB (within 1GB + 2GB swap)"

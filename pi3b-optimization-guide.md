@@ -71,139 +71,17 @@ O OpenClaw ja usa `Module.enableCompileCache()` no entry point - isso ajuda.
 
 ## PARTE 3: Configuracao do OpenClaw (openclaw.json)
 
-Este e o arquivo mais importante. Crie/edite `~/.openclaw/openclaw.json`:
+Este e o arquivo mais importante. Use o `pi3b-openclaw-config.json` fornecido,
+ou crie/edite `~/.openclaw/openclaw.json` com o conteudo desse arquivo.
 
-```json
-{
-  "browser": {
-    "enabled": false
-  },
+Pontos-chave da configuracao:
 
-  "canvasHost": {
-    "enabled": false
-  },
-
-  "tts": {
-    "auto": "off"
-  },
-
-  "discovery": {
-    "mdns": {
-      "mode": "off"
-    },
-    "wideArea": {
-      "enabled": false
-    }
-  },
-
-  "tools": {
-    "profile": "minimal",
-    "deny": [
-      "browser_*",
-      "image_*"
-    ],
-    "media": {
-      "concurrency": 1,
-      "video": {
-        "enabled": false
-      }
-    },
-    "web": {
-      "fetch": {
-        "maxChars": 10000,
-        "maxCharsCap": 15000
-      }
-    }
-  },
-
-  "plugins": {
-    "deny": [
-      "open-prose",
-      "matrix",
-      "msteams",
-      "voice-call",
-      "nostr",
-      "twitch",
-      "feishu",
-      "tlon",
-      "copilot-proxy",
-      "diagnostics-otel",
-      "llm-task",
-      "lobster",
-      "memory-lancedb",
-      "minimax-portal-auth",
-      "qwen-portal-auth",
-      "google-antigravity-auth",
-      "google-gemini-cli-auth",
-      "sherpa-onnx-tts",
-      "skill-creator",
-      "model-usage",
-      "himalaya",
-      "tmux",
-      "video-frames",
-      "nano-banana-pro",
-      "coding-agent",
-      "openai-image-gen",
-      "openai-whisper",
-      "openai-whisper-api",
-      "canvas",
-      "peekaboo",
-      "oracle",
-      "clawhub",
-      "blogwatcher",
-      "obsidian",
-      "notion",
-      "session-logs"
-    ],
-    "slots": {
-      "memory": "none"
-    }
-  },
-
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "anthropic/claude-sonnet-4-20250514",
-        "fallbacks": ["openai/gpt-4o-mini"]
-      },
-      "maxConcurrent": 1,
-      "timeoutSeconds": 120,
-      "mediaMaxMb": 2,
-      "thinkingDefault": "off",
-      "verboseDefault": "off",
-      "blockStreamingDefault": "off",
-      "subagents": {
-        "maxConcurrent": 1
-      },
-      "contextPruning": {
-        "mode": "cache-ttl",
-        "ttl": "15m"
-      },
-      "compaction": {
-        "mode": "safeguard",
-        "reserveTokensFloor": 5000,
-        "maxHistoryShare": 0.3,
-        "memoryFlush": {
-          "enabled": true,
-          "softThresholdTokens": 2000
-        }
-      },
-      "heartbeat": {
-        "every": "60m"
-      },
-      "sandbox": {
-        "mode": "off"
-      }
-    }
-  },
-
-  "models": {
-    "bedrockDiscovery": {
-      "enabled": false
-    }
-  }
-}
-```
+- **Thinking: "low"** - raciocinio basico mantido (processado na API, 0 RAM local)
+- **Memoria vetorial: habilitada** - embeddings via OpenAI API (0 RAM para modelo)
+- **SQLite + sqlite-vec** - armazenamento local leve (~30-80MB)
+- **Browser/Canvas/TTS** - desabilitados (economia de ~150-250MB)
+- **27 extensoes pesadas** - bloqueadas via deny list
+- **Sandbox Docker** - desabilitado
 
 ---
 
@@ -221,6 +99,12 @@ OPENCLAW_DISABLE_BONJOUR=1
 
 # Limitar heap do Node.js
 NODE_OPTIONS=--max-old-space-size=384
+
+# API key para embeddings remotos (memoria vetorial)
+# Escolha UMA das opcoes:
+OPENAI_API_KEY=sk-sua-chave-aqui
+# OU para Gemini (gratis):
+# GOOGLE_API_KEY=sua-chave-gemini
 ```
 
 ---
@@ -316,11 +200,139 @@ sudo systemctl start openclaw
 |---|---|---|
 | `maxConcurrent: 1` | 1 agente por vez | Evita picos de RAM |
 | `subagents.maxConcurrent: 1` | 1 sub-agente | Evita picos de RAM |
-| `thinkingDefault: "off"` | Sem "thinking" | Menos tokens/processamento |
+| `thinkingDefault: "low"` | Thinking leve | Raciocinio basico sem explodir tokens |
 | `compaction.mode: "safeguard"` | Compactacao agressiva | Contexto menor na RAM |
 | `contextPruning.ttl: "15m"` | Limpa contexto velho | Libera RAM mais rapido |
 | `sandbox.mode: "off"` | Sem Docker sandbox | Sem overhead de containers |
 | `heartbeat.every: "60m"` | Heartbeat a cada hora | Menos processamento idle |
+
+---
+
+## PARTE 6.1: Thinking (Raciocinio) - Mantido e Otimizado
+
+O thinking permite que o modelo "pense" antes de responder. Niveis disponiveis:
+`off < minimal < low < medium < high < xhigh`
+
+**Configuracao escolhida: `"low"`**
+
+Motivo: `low` oferece raciocinio basico (planejamento de resposta, verificacao
+de fatos na memoria) sem consumir muitos tokens extras. O custo de RAM no Pi
+e zero - o thinking acontece no servidor da API (Anthropic/OpenAI), nao localmente.
+
+O impacto real e:
+- **Latencia**: +1-3 segundos por resposta (aceitavel)
+- **Custo de API**: ~20-40% mais tokens por resposta
+- **RAM local**: 0 MB extra (processado no servidor remoto)
+
+Se quiser mais raciocinio, pode subir para `"medium"` sem impacto na RAM local.
+Use `/think medium` ou `/think high` em tempo real durante a conversa.
+
+---
+
+## PARTE 6.2: Memoria Vetorial - Estrategia "Remote Embeddings"
+
+### O problema do embedding local
+
+O provider `"local"` usa `node-llama-cpp` com um modelo GGUF de 300M parametros.
+Isso consome **500-900MB de RAM** - impossivel no Pi 3B+ com 1GB.
+
+### A solucao: embeddings via API remota (OpenAI)
+
+Em vez de rodar o modelo de embeddings localmente, usamos a API da OpenAI
+(`text-embedding-3-small`) para gerar os vetores. O Pi so armazena os resultados
+no SQLite local.
+
+**Fluxo:**
+```
+Usuario fala algo → OpenClaw salva no MEMORY.md
+                   → Envia texto para OpenAI API (embedding)
+                   → Recebe vetor de 1536 dimensoes
+                   → Armazena no SQLite local (sqlite-vec)
+
+Usuario pergunta  → OpenClaw gera embedding da pergunta (API)
+                   → Busca vetores similares no SQLite local
+                   → Retorna contexto relevante para o modelo
+```
+
+**Custo:** ~$0.02 por milhao de tokens (praticamente gratis)
+
+**RAM local:** ~30-80MB (SQLite + cache de 1000 embeddings)
+
+### Configuracao da memoria (ja no pi3b-openclaw-config.json)
+
+```json
+"memorySearch": {
+  "enabled": true,
+  "provider": "openai",
+  "model": "text-embedding-3-small",
+  "sources": ["memory"],
+  "chunking": {
+    "tokens": 200,
+    "overlap": 40
+  },
+  "sync": {
+    "onSessionStart": true,
+    "onSearch": true,
+    "watch": false,
+    "intervalMinutes": 0
+  },
+  "query": {
+    "maxResults": 3,
+    "minScore": 0.4,
+    "hybrid": {
+      "enabled": true,
+      "vectorWeight": 0.6,
+      "textWeight": 0.4,
+      "candidateMultiplier": 2
+    }
+  },
+  "store": {
+    "driver": "sqlite",
+    "vector": { "enabled": true },
+    "cache": { "enabled": true, "maxEntries": 1000 }
+  }
+}
+```
+
+### O que cada parametro faz
+
+| Parametro | Valor | Por que |
+|---|---|---|
+| `provider: "openai"` | API remota | 0 MB de RAM para embeddings |
+| `model: "text-embedding-3-small"` | Modelo menor | Mais rapido e barato |
+| `sources: ["memory"]` | So pasta memory/ | Nao indexa sessoes (economiza disco e RAM) |
+| `chunking.tokens: 200` | Chunks menores | Menos embeddings por documento |
+| `chunking.overlap: 40` | Overlap menor | Menos redundancia |
+| `sync.watch: false` | Sem file watcher | Economiza CPU/RAM do inotify |
+| `sync.intervalMinutes: 0` | Sem sync periodico | Sync so quando precisa |
+| `query.maxResults: 3` | 3 resultados max | Menos dados na RAM por busca |
+| `query.minScore: 0.4` | Threshold alto | Resultados mais relevantes |
+| `query.hybrid.candidateMultiplier: 2` | Pool menor | Menos calculos de similaridade |
+| `store.cache.maxEntries: 1000` | Cache limitado | ~10-20MB max de cache |
+
+### Variavel de ambiente necessaria
+
+```bash
+export OPENAI_API_KEY=sk-sua-chave-aqui
+```
+
+Adicione no `~/.openclaw/.env` ou no systemd service.
+
+### Alternativa sem custo: Gemini embeddings (gratis)
+
+Se nao quiser pagar pela API da OpenAI, o Google Gemini oferece
+embeddings gratuitos com limite generoso:
+
+```json
+"memorySearch": {
+  "provider": "gemini",
+  "model": "gemini-embedding-001"
+}
+```
+
+```bash
+export GOOGLE_API_KEY=sua-chave-gemini
+```
 
 ---
 
@@ -374,10 +386,13 @@ Para 1GB de RAM, recomendo **1 canal ativo**:
 | Gateway core | 100-150MB | 80-100MB |
 | Extensoes/plugins | 200-400MB | 20-40MB |
 | Canal (1x Telegram) | 30-50MB | 30-50MB |
-| **TOTAL** | **610-1020MB** | **340-470MB** |
+| Memoria vetorial (SQLite+cache) | 500-900MB (local) | 30-80MB (remoto) |
+| Thinking | 0MB (API) | 0MB (API) |
+| **TOTAL** | **1110-1920MB** | **370-550MB** |
 | Swap disponivel | - | 2048MB |
 
-Com otimizacao, sobram **~500-650MB livres** para swap e picos de uso.
+Com otimizacao, sobram **~450-630MB livres** + 2GB swap para picos.
+O thinking e os embeddings rodam no servidor remoto, custo de RAM local e minimo.
 
 ---
 
