@@ -22,11 +22,10 @@
 
   "tools": {
     "profile": "coding",
-    "alsoAllow": ["group:messaging", "group:web"],
+    "alsoAllow": ["group:messaging", "group:web", "cron"],
     "deny": [
       "browser",
       "canvas",
-      "cron",
       "nodes"
     ],
     "media": {

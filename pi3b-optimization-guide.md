@@ -94,7 +94,6 @@ Crie o arquivo `~/.openclaw/.env` ou configure no systemd:
 OPENCLAW_SKIP_BROWSER_CONTROL_SERVER=1
 OPENCLAW_SKIP_CANVAS_HOST=1
 OPENCLAW_SKIP_GMAIL_WATCHER=1
-OPENCLAW_SKIP_CRON=1
 OPENCLAW_DISABLE_BONJOUR=1
 
 # Limitar heap do Node.js
@@ -136,8 +135,7 @@ Environment=NODE_OPTIONS=--max-old-space-size=384
 Environment=OPENCLAW_SKIP_BROWSER_CONTROL_SERVER=1
 Environment=OPENCLAW_SKIP_CANVAS_HOST=1
 Environment=OPENCLAW_SKIP_GMAIL_WATCHER=1
-Environment=OPENCLAW_SKIP_CRON=1
-Environment=OPENCLAW_DISABLE_BONJOUR=1
+Environment=Environment=OPENCLAW_DISABLE_BONJOUR=1
 Environment=NODE_ENV=production
 
 ExecStart=/usr/bin/node /home/pi/openclaw/openclaw.mjs gateway --allow-unconfigured
@@ -165,7 +163,7 @@ sudo systemctl start openclaw
 | Browser Control (Playwright) | `OPENCLAW_SKIP_BROWSER_CONTROL_SERVER=1` | ~80-150MB |
 | Canvas Host | `OPENCLAW_SKIP_CANVAS_HOST=1` | ~20-40MB |
 | Gmail Watcher | `OPENCLAW_SKIP_GMAIL_WATCHER=1` | ~10-20MB |
-| Cron Scheduler | `OPENCLAW_SKIP_CRON=1` | ~5-10MB |
+| Cron Scheduler | habilitado (lembretes) | 0MB (mantido) |
 | Bonjour/mDNS | `OPENCLAW_DISABLE_BONJOUR=1` | ~5-10MB |
 | TTS (Text-to-Speech) | `tts.auto: "off"` | ~10-20MB |
 | Bedrock Discovery | `models.bedrockDiscovery.enabled: false` | ~30-50MB (AWS SDK) |
@@ -480,10 +478,10 @@ Perfil usado: `coding` + `group:messaging` + `group:web` (mesclagem coding+messa
 | Processos (process) | 100% | 100% |
 | Gerar imagens (image) | 100% | 100% |
 | Controle de browser | desabilitado | 100% |
-| Agendar tarefas (cron) | desabilitado | 100% |
+| Agendar tarefas (cron) | 100% | 100% |
 | Controle de devices (nodes) | desabilitado | 100% |
 | Modo elevado | desabilitado | 100% |
-| **Autonomia total** | **~85%** | **100%** |
+| **Autonomia total** | **~90%** | **100%** |
 
 ### Onde esta a "inteligencia" real
 
@@ -508,12 +506,14 @@ coding base:  read, write, edit, apply_patch, exec, process,
 + messaging:  message (enviar para canais)
 + web:        web_search, web_fetch
 
-- deny:       browser, canvas, cron, nodes (pesados ou desnecessarios)
++ cron:       cron (agendar lembretes e tarefas)
+
+- deny:       browser, canvas, nodes (pesados ou desnecessarios)
 ```
 
 Resultado: o agente pode conversar, lembrar, buscar na web, ler/escrever
-arquivos, executar comandos e criar sub-agentes. So nao controla browser,
-agenda cron ou gerencia devices externos.
+arquivos, executar comandos, agendar lembretes e criar sub-agentes.
+So nao controla browser ou gerencia devices externos.
 
 ### Para subir para autonomia total (sem custo de RAM)
 
@@ -521,14 +521,15 @@ agenda cron ou gerencia devices externos.
 "profile": "full"
 ```
 
-Isso libera browser, cron, nodes e elevated mode. O custo de RAM e
+Isso libera browser, nodes e elevated mode. O custo de RAM e
 praticamente zero - a diferenca e so quais ferramentas o modelo pode
 invocar. Mas browser precisa de `browser.enabled: true` e consome
 ~150MB extra de RAM.
 
 ### Conclusao
 
-A versao Pi preserva **~85% da autonomia** e **100% da inteligencia**.
-O que perdemos sao browser automation, cron scheduling e device control.
+A versao Pi preserva **~90% da autonomia** e **100% da inteligencia**.
+O que perdemos sao browser automation e device control.
 Para um assistente que conversa, lembra, busca na web, le/escreve
-arquivos e executa comandos, e praticamente a mesma experiencia do full.
+arquivos, executa comandos e agenda lembretes, e praticamente a
+mesma experiencia do full.
