@@ -21,8 +21,8 @@
   },
 
   "tools": {
-    "profile": "messaging",
-    "alsoAllow": ["memory_search", "memory_get", "web_search", "web_fetch"],
+    "profile": "coding",
+    "alsoAllow": ["group:messaging", "group:web"],
     "deny": [
       "browser",
       "canvas",

@@ -464,7 +464,9 @@ full       → TUDO: browser, exec, cron, nodes, web, fs, elevated
 
 ### Comparacao Pi (otimizado) vs Original (full)
 
-| Capacidade | Pi (messaging+memory+web) | Original (full) |
+Perfil usado: `coding` + `group:messaging` + `group:web` (mesclagem coding+messaging)
+
+| Capacidade | Pi (coding+messaging) | Original (full) |
 |---|---|---|
 | Raciocinio/thinking | low (~70%) | xhigh (100%) |
 | Memoria longo prazo | 100% (remoto) | 100% |
@@ -472,14 +474,16 @@ full       → TUDO: browser, exec, cron, nodes, web, fs, elevated
 | Busca web | 100% | 100% |
 | Busca na memoria vetorial | 100% | 100% |
 | Historico de sessoes | 100% | 100% |
-| Sub-agentes | parcial (1 por vez) | total (N por vez) |
-| Ler/escrever arquivos | bloqueado | 100% |
-| Executar comandos (exec) | bloqueado | 100% |
+| Sub-agentes (sessions_spawn) | 100% (1 por vez) | 100% (N por vez) |
+| Ler/escrever arquivos (fs) | 100% | 100% |
+| Executar comandos (exec) | 100% | 100% |
+| Processos (process) | 100% | 100% |
+| Gerar imagens (image) | 100% | 100% |
 | Controle de browser | desabilitado | 100% |
 | Agendar tarefas (cron) | desabilitado | 100% |
 | Controle de devices (nodes) | desabilitado | 100% |
 | Modo elevado | desabilitado | 100% |
-| **Autonomia total** | **~65%** | **100%** |
+| **Autonomia total** | **~85%** | **100%** |
 
 ### Onde esta a "inteligencia" real
 
@@ -492,29 +496,39 @@ A inteligencia do OpenClaw vem de 3 coisas:
 Nenhuma dessas 3 roda no Pi. O Pi e apenas o "corpo" - recebe mensagens,
 encaminha para a API, armazena memoria. O "cerebro" esta na nuvem.
 
-### Para subir a autonomia no Pi (sem custo de RAM)
+### O que a mesclagem coding+messaging da
 
-Se quiser mais autonomia, troque o profile:
+A config usa `coding` como base e adiciona `group:messaging` + `group:web`:
+
+```
+coding base:  read, write, edit, apply_patch, exec, process,
+              sessions_list/history/send/spawn, session_status,
+              memory_search, memory_get, image
+
++ messaging:  message (enviar para canais)
++ web:        web_search, web_fetch
+
+- deny:       browser, canvas, cron, nodes (pesados ou desnecessarios)
+```
+
+Resultado: o agente pode conversar, lembrar, buscar na web, ler/escrever
+arquivos, executar comandos e criar sub-agentes. So nao controla browser,
+agenda cron ou gerencia devices externos.
+
+### Para subir para autonomia total (sem custo de RAM)
 
 ```json
-// Nivel 1: Assistente conversacional (config atual)
-"profile": "messaging"
-
-// Nivel 2: Agente que le/escreve arquivos e executa comandos
-"profile": "coding"
-
-// Nivel 3: Autonomia total (cuidado!)
 "profile": "full"
 ```
 
-O custo de RAM entre os perfis e praticamente zero - a diferenca e
-so quais ferramentas o modelo pode invocar. O processamento pesado
-(LLM inference) acontece no servidor remoto.
+Isso libera browser, cron, nodes e elevated mode. O custo de RAM e
+praticamente zero - a diferenca e so quais ferramentas o modelo pode
+invocar. Mas browser precisa de `browser.enabled: true` e consome
+~150MB extra de RAM.
 
 ### Conclusao
 
-A versao Pi preserva **~65% da autonomia** e **100% da inteligencia**.
-O que perdemos sao "bracos" (browser, exec, cron), nao "cerebro".
-Para um assistente que conversa, lembra e busca na web, e praticamente
-a mesma experiencia. Se quiser dar mais "bracos", basta trocar o
-profile para "coding" ou "full" sem impacto na RAM.
+A versao Pi preserva **~85% da autonomia** e **100% da inteligencia**.
+O que perdemos sao browser automation, cron scheduling e device control.
+Para um assistente que conversa, lembra, busca na web, le/escreve
+arquivos e executa comandos, e praticamente a mesma experiencia do full.
