@@ -636,3 +636,200 @@ e a compressao lz4 e tao rapida que nao impacta a CPU.
 
 Com DietPi, o Pi 3B+ fica com **64% de RAM livre** - sobra muito
 espaco para picos de uso, e o zram protege o SD card.
+
+---
+
+## PARTE 13: Instalacao Completa (do zero)
+
+### Opcao 1: Script automatico (recomendado)
+
+No Pi 3B+ com DietPi ou Pi OS Lite ja instalado:
+
+```bash
+# Baixar e executar o instalador
+curl -fsSL https://raw.githubusercontent.com/.../scripts/pi3b-install.sh | bash
+
+# OU se ja tiver o repo clonado:
+bash scripts/pi3b-install.sh
+```
+
+O script faz tudo automaticamente:
+1. Verifica arquitetura (aarch64) e RAM
+2. Configura swap (zram ou arquivo)
+3. Reduz GPU para 16MB
+4. Desabilita servicos desnecessarios
+5. Instala Node.js 22, pnpm, build-essential
+6. Clona OpenClaw e faz build (pnpm install + pnpm build)
+7. Instala config otimizada para Pi
+8. Cria servico systemd
+9. Instala comando `openclaw-update`
+
+### Opcao 2: Instalacao manual passo a passo
+
+```bash
+# 1. Instalar dependencias do sistema
+sudo apt-get update
+sudo apt-get install -y build-essential python3 git curl
+
+# 2. Instalar Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# 3. Instalar pnpm
+npm install -g pnpm
+
+# 4. Clonar OpenClaw
+git clone --depth 1 https://github.com/nicholasgriffintn/openclaw.git /opt/openclaw
+cd /opt/openclaw
+
+# 5. Instalar dependencias e fazer build
+pnpm install
+pnpm build
+
+# 6. (Opcional) Build da interface web
+pnpm ui:build
+
+# 7. Configurar
+mkdir -p ~/.openclaw
+cp pi3b-openclaw-config.json ~/.openclaw/openclaw.json
+
+# 8. Configurar API keys
+cat > ~/.openclaw/.env << 'EOF'
+ANTHROPIC_API_KEY=sk-ant-sua-chave
+OPENAI_API_KEY=sk-sua-chave
+OPENCLAW_SKIP_BROWSER_CONTROL_SERVER=1
+OPENCLAW_SKIP_CANVAS_HOST=1
+OPENCLAW_SKIP_GMAIL_WATCHER=1
+OPENCLAW_DISABLE_BONJOUR=1
+NODE_OPTIONS=--max-old-space-size=384
+EOF
+
+# 9. Testar (foreground)
+node openclaw.mjs gateway --allow-unconfigured --verbose
+
+# 10. Instalar como servico
+bash scripts/pi3b-setup.sh
+sudo systemctl start openclaw
+```
+
+### Opcao 3: Com variaveis de ambiente pre-definidas
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-xxx \
+OPENAI_API_KEY=sk-xxx \
+OPENCLAW_BRANCH=main \
+bash scripts/pi3b-install.sh
+```
+
+As API keys sao automaticamente escritas no .env.
+
+---
+
+## PARTE 14: Sistema de Atualizacao
+
+### Comando de atualizacao
+
+Apos a instalacao, o comando `openclaw-update` fica disponivel:
+
+```bash
+# Verificar se ha atualizacoes
+openclaw-update --check
+
+# Atualizar para a versao mais recente
+openclaw-update
+
+# Trocar de branch
+openclaw-update --branch develop
+
+# Voltar para a versao anterior (se algo quebrar)
+openclaw-update --rollback
+```
+
+### O que o updater faz automaticamente
+
+1. **Busca mudancas** no repositorio remoto
+2. **Salva ponto de rollback** (commit atual)
+3. **Puxa os commits** novos
+4. **Detecta o que mudou**:
+   - `package.json` / `pnpm-lock.yaml` → reinstala dependencias
+   - `src/` / `tsdown.config` → reconstroi TypeScript
+   - `ui/` → reconstroi interface web
+   - `pi3b-openclaw-config.json` → avisa sobre mudanca de config
+5. **Reinicia o servico** (so se necessario)
+6. **Verifica se iniciou** - se falhar, faz rollback automatico
+
+### Atualizacao automatica (cron)
+
+Para atualizar toda noite as 3h da manha:
+
+```bash
+# Adicionar ao crontab
+crontab -e
+```
+
+Adicione a linha:
+```
+0 3 * * * /usr/local/bin/openclaw-update --auto >> /var/log/openclaw-update.log 2>&1
+```
+
+O modo `--auto` nao aplica mudancas de config automaticamente
+(voce precisa revisar manualmente). Mas reinstala deps e reconstroi
+se necessario.
+
+### Rollback
+
+Se algo der errado apos uma atualizacao:
+
+```bash
+# Voltar para a ultima versao que funcionava
+openclaw-update --rollback
+
+# Ver qual versao esta rodando
+cd /opt/openclaw && git log --oneline -5
+```
+
+O rollback:
+1. Volta para o commit salvo antes da atualizacao
+2. Reinstala dependencias daquele commit
+3. Reconstroi o projeto
+4. Reinicia o servico
+
+### Fluxo de desenvolvimento → Pi
+
+```
+Voce (dev machine)           Pi 3B+ (producao)
+─────────────────            ──────────────────
+git commit + push    ──→     openclaw-update
+                             ├─ git pull
+                             ├─ pnpm install (se deps mudaram)
+                             ├─ pnpm build (se src mudou)
+                             ├─ systemctl restart openclaw
+                             └─ verificacao de saude
+```
+
+### Estrutura de arquivos no Pi
+
+```
+/opt/openclaw/                    # Codigo-fonte + build
+├── openclaw.mjs                  # Entry point
+├── dist/                         # Build compilado
+├── node_modules/                 # Dependencias
+├── pi3b-openclaw-config.json     # Template de config
+├── scripts/
+│   ├── pi3b-install.sh           # Instalador
+│   ├── pi3b-update.sh            # Atualizador
+│   └── pi3b-setup.sh             # Setup de sistema
+└── ...
+
+~/.openclaw/                      # Dados do usuario
+├── openclaw.json                 # Config ativa
+├── .env                          # API keys e env vars
+├── .last-good-commit             # Ponto de rollback
+└── state/                        # Sessoes, memoria, etc.
+
+/etc/systemd/system/
+└── openclaw.service              # Servico systemd
+
+/usr/local/bin/
+└── openclaw-update -> /opt/openclaw/scripts/pi3b-update.sh
+```
