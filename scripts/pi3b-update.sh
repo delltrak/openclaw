@@ -20,6 +20,27 @@ LOG_FILE="/var/log/openclaw-update.log"
 MAX_RETRIES=3
 RETRY_DELAY=5
 
+# ─── Security ───────────────────────────────────────────────────────────────
+# Trusted GPG key fingerprints (add your key here)
+# Get yours with: gpg --list-keys --keyid-format long
+# Example: TRUSTED_GPG_KEYS=("ABCD1234EFGH5678" "IJKL9012MNOP3456")
+TRUSTED_GPG_KEYS=()
+
+# Trusted GitHub usernames (commits must be authored by one of these)
+# Only enforced if non-empty
+TRUSTED_AUTHORS=()
+
+# Require signed commits? (true = block unsigned commits)
+REQUIRE_SIGNED_COMMITS=false
+
+# File patterns that should NEVER change (blocks update if modified)
+BLOCKED_PATTERNS=(
+  "\.env$"
+  "credentials"
+  "\.pem$"
+  "\.key$"
+)
+
 # ─── Colors ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -36,22 +57,29 @@ info() { echo -e "${BLUE}[i]${NC} $(date '+%H:%M:%S') $*"; }
 ACTION="update"
 TARGET_BRANCH=""
 AUTO_MODE=false
+SKIP_SECURITY=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --check)    ACTION="check"; shift ;;
-    --rollback) ACTION="rollback"; shift ;;
-    --branch)   TARGET_BRANCH="$2"; shift 2 ;;
-    --auto)     AUTO_MODE=true; shift ;;
+    --check)         ACTION="check"; shift ;;
+    --rollback)      ACTION="rollback"; shift ;;
+    --branch)        TARGET_BRANCH="$2"; shift 2 ;;
+    --auto)          AUTO_MODE=true; shift ;;
+    --skip-security) SKIP_SECURITY=true; shift ;;
     --help|-h)
       echo "Usage: openclaw-update [OPTIONS]"
       echo ""
       echo "Options:"
-      echo "  --check      Check for updates without installing"
-      echo "  --rollback   Rollback to previous version"
-      echo "  --branch X   Switch to branch X and update"
-      echo "  --auto       Non-interactive mode (for cron)"
-      echo "  --help       Show this help"
+      echo "  --check           Check for updates without installing"
+      echo "  --rollback        Rollback to previous version"
+      echo "  --branch X        Switch to branch X and update"
+      echo "  --auto            Non-interactive mode (for cron)"
+      echo "  --skip-security   Skip security checks (NOT recommended)"
+      echo "  --help            Show this help"
+      echo ""
+      echo "Security:"
+      echo "  Configure TRUSTED_AUTHORS, TRUSTED_GPG_KEYS, and"
+      echo "  REQUIRE_SIGNED_COMMITS at the top of this script."
       exit 0
       ;;
     *) err "Unknown option: $1"; exit 1 ;;
@@ -146,6 +174,137 @@ if [ "$ACTION" = "rollback" ]; then
   log "Rolled back to $ROLLBACK_COMMIT and restarted."
   exit 0
 fi
+
+# ─── Security verification ───────────────────────────────────────────────────
+if [ "$SKIP_SECURITY" = true ]; then
+  warn "Security checks SKIPPED (--skip-security flag)"
+else
+info "Running security checks..."
+
+# Check 1: Verify commit signatures (if required)
+if [ "$REQUIRE_SIGNED_COMMITS" = true ]; then
+  UNSIGNED_COMMITS=$(git log --format='%H %G?' HEAD..origin/"$BRANCH" | grep -v ' G$' | grep -v ' U$' || true)
+  if [ -n "$UNSIGNED_COMMITS" ]; then
+    err "SECURITY: Unsigned commits detected!"
+    echo "$UNSIGNED_COMMITS" | while read -r hash status; do
+      err "  $hash (signature: $status)"
+    done
+    err "All commits must be GPG-signed. Aborting update."
+    err "To disable: set REQUIRE_SIGNED_COMMITS=false in update script."
+    exit 1
+  fi
+  log "All commits are GPG-signed"
+fi
+
+# Check 2: Verify trusted GPG keys (if configured)
+if [ ${#TRUSTED_GPG_KEYS[@]} -gt 0 ]; then
+  UNTRUSTED=false
+  while IFS= read -r line; do
+    COMMIT_HASH=$(echo "$line" | awk '{print $1}')
+    KEY_ID=$(echo "$line" | awk '{print $2}')
+    TRUSTED=false
+    for TKEY in "${TRUSTED_GPG_KEYS[@]}"; do
+      if [[ "$KEY_ID" == *"$TKEY"* ]]; then
+        TRUSTED=true
+        break
+      fi
+    done
+    if [ "$TRUSTED" = false ] && [ -n "$KEY_ID" ] && [ "$KEY_ID" != "" ]; then
+      err "SECURITY: Commit $COMMIT_HASH signed by untrusted key: $KEY_ID"
+      UNTRUSTED=true
+    fi
+  done < <(git log --format='%H %GK' HEAD..origin/"$BRANCH" | grep -v ' $')
+  if [ "$UNTRUSTED" = true ]; then
+    err "Aborting: commits signed by keys not in TRUSTED_GPG_KEYS."
+    exit 1
+  fi
+  log "All commit signatures from trusted keys"
+fi
+
+# Check 3: Verify trusted authors (if configured)
+if [ ${#TRUSTED_AUTHORS[@]} -gt 0 ]; then
+  UNTRUSTED_AUTHOR=false
+  while IFS= read -r author_email; do
+    AUTHOR_TRUSTED=false
+    for TAUTHOR in "${TRUSTED_AUTHORS[@]}"; do
+      if [[ "$author_email" == *"$TAUTHOR"* ]]; then
+        AUTHOR_TRUSTED=true
+        break
+      fi
+    done
+    if [ "$AUTHOR_TRUSTED" = false ]; then
+      err "SECURITY: Commit by untrusted author: $author_email"
+      UNTRUSTED_AUTHOR=true
+    fi
+  done < <(git log --format='%ae' HEAD..origin/"$BRANCH" | sort -u)
+  if [ "$UNTRUSTED_AUTHOR" = true ]; then
+    err "Aborting: commits by authors not in TRUSTED_AUTHORS."
+    err "Add trusted authors to TRUSTED_AUTHORS in the update script."
+    exit 1
+  fi
+  log "All commits from trusted authors"
+fi
+
+# Check 4: Scan for suspicious files in the diff
+SUSPICIOUS_FILES=""
+while IFS= read -r changed_file; do
+  for pattern in "${BLOCKED_PATTERNS[@]}"; do
+    if echo "$changed_file" | grep -qE "$pattern"; then
+      SUSPICIOUS_FILES="$SUSPICIOUS_FILES\n  $changed_file (matches: $pattern)"
+    fi
+  done
+done < <(git diff --name-only HEAD..origin/"$BRANCH")
+
+if [ -n "$SUSPICIOUS_FILES" ]; then
+  err "SECURITY: Suspicious files detected in update!"
+  echo -e "$SUSPICIOUS_FILES"
+  err ""
+  err "These file patterns should never be in a remote update."
+  err "This could indicate a compromised repository."
+  if [ "$AUTO_MODE" = true ]; then
+    err "Auto mode: aborting update. Review manually."
+    exit 1
+  else
+    echo -n "Continue anyway? (y/N): "
+    read -r CONTINUE
+    if [[ ! "$CONTINUE" =~ ^[Yy] ]]; then
+      err "Update cancelled."
+      exit 1
+    fi
+    warn "Continuing at user's request..."
+  fi
+fi
+
+# Check 5: Detect new post-install scripts or hooks
+NEW_SCRIPTS=$(git diff --name-only --diff-filter=A HEAD..origin/"$BRANCH" | grep -E '(\.sh$|hooks/|\.github/|Makefile|postinstall)' || true)
+if [ -n "$NEW_SCRIPTS" ]; then
+  warn "SECURITY: New executable scripts detected in update:"
+  echo "$NEW_SCRIPTS" | while read -r f; do warn "  $f"; done
+  if [ "$AUTO_MODE" = true ]; then
+    warn "Auto mode: review these files after update."
+  else
+    echo -n "Review these scripts before continuing? (Y/n): "
+    read -r REVIEW
+    if [[ ! "$REVIEW" =~ ^[Nn] ]]; then
+      for f in $NEW_SCRIPTS; do
+        echo ""
+        echo "━━━ $f ━━━"
+        git show "origin/$BRANCH:$f" 2>/dev/null | head -50
+        echo "━━━━━━━━━━"
+      done
+      echo ""
+      echo -n "Proceed with update? (y/N): "
+      read -r PROCEED
+      if [[ ! "$PROCEED" =~ ^[Yy] ]]; then
+        err "Update cancelled."
+        exit 1
+      fi
+    fi
+  fi
+fi
+
+log "Security checks passed"
+fi  # end skip-security check
 
 # ─── Update ──────────────────────────────────────────────────────────────────
 info "Updating OpenClaw..."

@@ -794,6 +794,91 @@ O rollback:
 3. Reconstroi o projeto
 4. Reinicia o servico
 
+### Seguranca do sistema de atualizacao
+
+O updater tem 5 verificacoes de seguranca integradas:
+
+**1. Verificacao de commits assinados (GPG)**
+
+Ative assinatura obrigatoria editando o script de update:
+
+```bash
+# No pi3b-update.sh, mude:
+REQUIRE_SIGNED_COMMITS=true
+```
+
+Na sua maquina de desenvolvimento, configure GPG:
+
+```bash
+# Gerar chave GPG (se nao tiver)
+gpg --full-generate-key
+
+# Configurar git para assinar commits
+git config --global user.signingkey SUA_CHAVE_ID
+git config --global commit.gpgsign true
+
+# Ver seu key ID
+gpg --list-keys --keyid-format long
+```
+
+**2. Autores confiáveis**
+
+Restrinja quais emails de commit sao aceitos:
+
+```bash
+# No pi3b-update.sh:
+TRUSTED_AUTHORS=("seu-email@gmail.com" "outro-dev@empresa.com")
+```
+
+Com isso, mesmo que alguem ganhe acesso ao repo, commits com
+emails desconhecidos sao bloqueados.
+
+**3. Chaves GPG confiáveis**
+
+Alem de exigir assinatura, voce pode restringir QUAIS chaves
+sao aceitas:
+
+```bash
+# No pi3b-update.sh:
+TRUSTED_GPG_KEYS=("ABCD1234EFGH5678")
+```
+
+**4. Deteccao de arquivos suspeitos**
+
+O updater bloqueia automaticamente atualizacoes que contenham:
+- Arquivos `.env` (credenciais)
+- Arquivos `.pem` ou `.key` (certificados/chaves privadas)
+- Qualquer arquivo com "credentials" no nome
+
+Esses NUNCA devem vir de um `git pull`.
+
+**5. Deteccao de scripts novos**
+
+Se uma atualizacao adiciona novos `.sh`, `Makefile`, hooks ou
+scripts postinstall, o updater avisa e pede para voce revisar
+o conteudo ANTES de aplicar.
+
+**Recomendacao de seguranca por nivel:**
+
+| Nivel | Configuracao |
+|---|---|
+| Basico (so voce no repo) | TRUSTED_AUTHORS com seu email |
+| Medio (time pequeno) | TRUSTED_AUTHORS + REQUIRE_SIGNED_COMMITS |
+| Alto (producao) | Tudo acima + TRUSTED_GPG_KEYS + branch protection no GitHub |
+
+**Branch protection no GitHub (recomendado):**
+
+```
+Settings > Branches > Add rule > main
+[x] Require pull request reviews before merging
+[x] Require signed commits
+[x] Do not allow force pushes
+[x] Do not allow deletions
+```
+
+Com isso, NINGUEM (nem voce) pode dar push direto no main.
+Toda mudanca precisa de PR + review.
+
 ### Fluxo de desenvolvimento → Pi
 
 ```
