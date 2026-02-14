@@ -436,3 +436,85 @@ Se depois de todas as otimizacoes ainda tiver problemas:
    Acesse via WebSocket na porta 18789 de outro dispositivo.
 
 3. **Considerar upgrade**: Pi 4 (2GB) custa ~R$200 e dobra os recursos.
+
+---
+
+## PARTE 11: Nivel de Autonomia - Pi vs Original
+
+### O que e "AGI-like" no OpenClaw
+
+O OpenClaw tem um sistema de autonomia em camadas:
+
+1. **Thinking** - raciocinio interno do modelo (chain-of-thought)
+2. **Tool use** - invocacao de ferramentas (exec, fs, web, messaging)
+3. **Sub-agents** - criar outros agentes para tarefas paralelas
+4. **Heartbeat** - agir proativamente sem input do usuario
+5. **Hooks** - reagir a eventos automaticamente
+6. **Elevated mode** - escalar permissoes para acesso total ao host
+7. **Cron** - agendar tarefas futuras autonomamente
+
+### Perfis de ferramentas (o que cada um libera)
+
+```
+minimal    → session_status (so olha status)
+messaging  → enviar/receber mensagens, historico, listar sessoes
+coding     → ler/escrever arquivos, executar comandos, sub-agentes, memoria
+full       → TUDO: browser, exec, cron, nodes, web, fs, elevated
+```
+
+### Comparacao Pi (otimizado) vs Original (full)
+
+| Capacidade | Pi (messaging+memory+web) | Original (full) |
+|---|---|---|
+| Raciocinio/thinking | low (~70%) | xhigh (100%) |
+| Memoria longo prazo | 100% (remoto) | 100% |
+| Enviar/receber mensagens | 100% | 100% |
+| Busca web | 100% | 100% |
+| Busca na memoria vetorial | 100% | 100% |
+| Historico de sessoes | 100% | 100% |
+| Sub-agentes | parcial (1 por vez) | total (N por vez) |
+| Ler/escrever arquivos | bloqueado | 100% |
+| Executar comandos (exec) | bloqueado | 100% |
+| Controle de browser | desabilitado | 100% |
+| Agendar tarefas (cron) | desabilitado | 100% |
+| Controle de devices (nodes) | desabilitado | 100% |
+| Modo elevado | desabilitado | 100% |
+| **Autonomia total** | **~65%** | **100%** |
+
+### Onde esta a "inteligencia" real
+
+A inteligencia do OpenClaw vem de 3 coisas:
+
+1. **O modelo LLM** (Anthropic/OpenAI) - processado remotamente, 100% preservado
+2. **Thinking tokens** - raciocinio estendido, preservado em nivel "low"
+3. **Memoria vetorial** - lembrar do usuario, 100% preservado via API remota
+
+Nenhuma dessas 3 roda no Pi. O Pi e apenas o "corpo" - recebe mensagens,
+encaminha para a API, armazena memoria. O "cerebro" esta na nuvem.
+
+### Para subir a autonomia no Pi (sem custo de RAM)
+
+Se quiser mais autonomia, troque o profile:
+
+```json
+// Nivel 1: Assistente conversacional (config atual)
+"profile": "messaging"
+
+// Nivel 2: Agente que le/escreve arquivos e executa comandos
+"profile": "coding"
+
+// Nivel 3: Autonomia total (cuidado!)
+"profile": "full"
+```
+
+O custo de RAM entre os perfis e praticamente zero - a diferenca e
+so quais ferramentas o modelo pode invocar. O processamento pesado
+(LLM inference) acontece no servidor remoto.
+
+### Conclusao
+
+A versao Pi preserva **~65% da autonomia** e **100% da inteligencia**.
+O que perdemos sao "bracos" (browser, exec, cron), nao "cerebro".
+Para um assistente que conversa, lembra e busca na web, e praticamente
+a mesma experiencia. Se quiser dar mais "bracos", basta trocar o
+profile para "coding" ou "full" sem impacto na RAM.

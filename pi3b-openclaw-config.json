@@ -21,10 +21,13 @@
   },
 
   "tools": {
-    "profile": "minimal",
+    "profile": "messaging",
+    "alsoAllow": ["memory_search", "memory_get", "web_search", "web_fetch"],
     "deny": [
-      "browser_*",
-      "image_*"
+      "browser",
+      "canvas",
+      "cron",
+      "nodes"
     ],
     "media": {
       "concurrency": 1,
